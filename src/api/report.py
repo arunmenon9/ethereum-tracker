@@ -26,7 +26,6 @@ async def generate_report(
     3. Generate a CSV file with all transactions
     4. Return a report ID for checking status
     
-    The process typically takes 2-10 minutes depending on the number of transactions.
     """
     
     service = ReportService()

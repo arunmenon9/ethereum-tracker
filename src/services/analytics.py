@@ -89,7 +89,7 @@ class AnalyticsService:
         # Get error rate (if status codes are recorded)
         error_rate_query = """
             SELECT 
-                COUNT(CASE WHEN status_code >= 400 THEN 1 END) * 100.0 / COUNT(*) as error_rate
+                COUNT(CASE WHEN status_code >= 400 THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0) as error_rate
             FROM api_usage 
             WHERE request_timestamp BETWEEN :start_date AND :end_date
             AND status_code IS NOT NULL
@@ -107,8 +107,6 @@ class AnalyticsService:
             "summary": {
                 "total_requests": total_requests["total_requests"] if total_requests else 0,
                 "unique_wallets": unique_wallets["unique_wallets"] if unique_wallets else 0,
-                "avg_response_time_ms": float(avg_response_time["avg_response_time"]) if avg_response_time and avg_response_time["avg_response_time"] else None,
-                "error_rate_percent": float(error_rate["error_rate"]) if error_rate and error_rate["error_rate"] else None
             },
             "top_endpoints": [
                 {
@@ -309,64 +307,3 @@ class AnalyticsService:
                     for row in top_wallets
                 ]
             }
-    
-    async def get_endpoint_analytics(self) -> Dict[str, Any]:
-        """Get endpoint performance analytics"""
-        
-        # Endpoint usage statistics
-        endpoint_stats_query = """
-            SELECT 
-                endpoint,
-                COUNT(*) as total_requests,
-                COUNT(DISTINCT wallet_address) as unique_users,
-                AVG(response_time_ms) as avg_response_time,
-                MIN(response_time_ms) as min_response_time,
-                MAX(response_time_ms) as max_response_time,
-                COUNT(CASE WHEN status_code >= 400 THEN 1 END) * 100.0 / COUNT(*) as error_rate
-            FROM api_usage 
-            WHERE response_time_ms IS NOT NULL OR status_code IS NOT NULL
-            GROUP BY endpoint
-            ORDER BY total_requests DESC
-        """
-        endpoint_stats = await database.fetch_all(endpoint_stats_query)
-        
-        # Recent endpoint performance trends (last 24 hours)
-        performance_trends_query = """
-            SELECT 
-                endpoint,
-                DATE_TRUNC('hour', request_timestamp) as hour,
-                COUNT(*) as request_count,
-                AVG(response_time_ms) as avg_response_time
-            FROM api_usage 
-            WHERE request_timestamp >= NOW() - INTERVAL '24 hours'
-            AND response_time_ms IS NOT NULL
-            GROUP BY endpoint, DATE_TRUNC('hour', request_timestamp)
-            ORDER BY endpoint, hour
-        """
-        performance_trends = await database.fetch_all(performance_trends_query)
-        
-        return {
-            "endpoint_statistics": [
-                {
-                    "endpoint": row["endpoint"],
-                    "total_requests": row["total_requests"],
-                    "unique_users": row["unique_users"],
-                    "performance": {
-                        "avg_response_time_ms": float(row["avg_response_time"]) if row["avg_response_time"] else None,
-                        "min_response_time_ms": row["min_response_time"],
-                        "max_response_time_ms": row["max_response_time"]
-                    },
-                    "error_rate_percent": float(row["error_rate"]) if row["error_rate"] else None
-                }
-                for row in endpoint_stats
-            ],
-            "performance_trends": [
-                {
-                    "endpoint": row["endpoint"],
-                    "hour": row["hour"].isoformat(),
-                    "request_count": row["request_count"],
-                    "avg_response_time_ms": float(row["avg_response_time"]) if row["avg_response_time"] else None
-                }
-                for row in performance_trends
-            ]
-        }

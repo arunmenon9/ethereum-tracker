@@ -67,8 +67,6 @@ app.add_middleware(
 # Request logging middleware
 # Update the existing request logging middleware in main.py
 
-# Update the existing request logging middleware in main.py
-
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     start_time = time.time()
@@ -90,7 +88,6 @@ async def log_requests(request: Request, call_next):
                 wallet_address = potential_address.lower()
                 break
         elif part == "reports" and i + 1 < len(path_parts):
-            # Handle reports endpoints like /reports/status/{address} or /reports/download/{address}
             if i + 2 < len(path_parts):
                 potential_address = path_parts[i + 2]
                 if potential_address.startswith("0x") and len(potential_address) == 42:

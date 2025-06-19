@@ -76,19 +76,3 @@ async def get_wallet_analytics(
     service = AnalyticsService()
     return await service.get_wallet_analytics(wallet_address, limit)
 
-@router.get("/endpoints", response_model=EndpointStats)
-async def get_endpoint_analytics(
-    api_key: str = Depends(verify_api_key)
-):
-    """
-    Get endpoint performance analytics
-    
-    Provides:
-    - Request volume per endpoint
-    - Response time statistics
-    - Error rates by endpoint
-    - Performance trends (24h)
-    """
-    
-    service = AnalyticsService()
-    return await service.get_endpoint_analytics()

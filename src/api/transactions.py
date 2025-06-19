@@ -12,8 +12,8 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 @router.get("/{wallet_address}", response_model=TransactionListResponse)
 async def get_transactions(
     wallet_address: str,
-    start_date: Optional[datetime] = Query(None, description="Start date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"),
-    end_date: Optional[datetime] = Query(None, description="End date (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"),
+    start_date: Optional[datetime] = Query(None, description="Start date (YYYY-MM-DDTHH:MM:SS)"),
+    end_date: Optional[datetime] = Query(None, description="End date (YYYY-MM-DDTHH:MM:SS)"),
     transaction_types: Optional[List[str]] = Query(None, description="Filter by transaction types"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Page size"),

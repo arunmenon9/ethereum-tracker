@@ -25,7 +25,7 @@ class CSVExportService:
             wallet_address=wallet_address,
             filters=filters,
             page=1,
-            page_size=50000  # Large page size for export
+            page_size=500000  # Large page size for export
         )
         
         # Check if this is a large dataset error

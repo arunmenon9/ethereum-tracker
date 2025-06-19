@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     EXPORT_BATCH_SIZE: int = 1000
     
     # Cache TTL (seconds)
-    CACHE_TTL_TRANSACTIONS: int = 300  # 5 minutes
-    CACHE_TTL_BLOCKS: int = 3600       # 1 hour
+    CACHE_TTL_TRANSACTIONS: int = 3600  
+    CACHE_TTL_BLOCKS: int = 3600      
 
 @lru_cache()
 def get_settings():

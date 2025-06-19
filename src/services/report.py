@@ -89,7 +89,6 @@ class ReportService:
             created_at=report["created_at"],
             updated_at=report["updated_at"],
             progress_percentage=report["progress_percentage"],
-            estimated_completion=self._calculate_estimated_completion(report),
             error_message=report["error_message"],
             file_size_mb=float(report["file_size_mb"]) if report["file_size_mb"] else None,
             total_transactions=report["total_transactions"]
@@ -208,7 +207,7 @@ class ReportService:
             current_block = await client.get_current_block_number()
             
             all_transactions = []
-            block_range_size = 1500000  # Smaller ranges for more frequent progress updates
+            block_range_size = 1500000  # bigger ranges to reduce the number of api calls
             total_ranges = (current_block // block_range_size) + 1
             processed_ranges = 0
             
@@ -294,16 +293,3 @@ class ReportService:
         
         return file_path
     
-    def _calculate_estimated_completion(self, report: Dict) -> Optional[datetime]:
-        """Calculate estimated completion time based on progress"""
-        if report["status"] == ReportStatus.COMPLETED.value:
-            return report["completed_at"]
-        
-        if report["status"] == ReportStatus.IN_PROGRESS.value and report["progress_percentage"]:
-            # Simple estimation based on progress
-            elapsed = datetime.utcnow() - report["started_at"]
-            if report["progress_percentage"] > 0:
-                total_estimated = elapsed / (report["progress_percentage"] / 100)
-                return report["started_at"] + total_estimated
-        
-        return None

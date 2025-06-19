@@ -355,10 +355,6 @@ class EtherscanClient:
             normal_tx_task, internal_tx_task, token_tx_task, nft_tx_task,
              return_exceptions=True
         )
-        print(f"normal_tx : {normal_tx}")
-        print(f"internal_tx : {internal_tx}")
-        print(f"token_tx : {token_tx}")
-        print(f"nft_tx : {nft_tx}")
 
         return {
             'normal': normal_tx if not isinstance(normal_tx, Exception) else [],

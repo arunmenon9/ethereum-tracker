@@ -70,8 +70,6 @@ class AnalyticsOverview(BaseModel):
 class UsageStats(BaseModel):
     total_requests: int
     unique_wallets: int
-    avg_response_time_ms: Optional[float]
-    error_rate_percent: Optional[float]
 
 class WalletStats(BaseModel):
     wallet_address: str

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from datetime import datetime
 
-from src.models.schemas import CSVExportRequest, TransactionFilter
+from src.models.schemas import CSVExportRequest, TransactionFilter, TransactionType
 from src.services.csv_export import CSVExportService
 from src.api.auth import verify_api_key
 
@@ -51,6 +52,7 @@ async def export_transactions_csv_get(
     wallet_address: str,
     start_date: datetime = None,
     end_date: datetime = None,
+    transaction_types: Optional[List[TransactionType]] = Query(None, description="Filter by transaction types (can specify multiple)"),
     api_key: str = Depends(verify_api_key)
 ) -> StreamingResponse:
     """
@@ -60,7 +62,8 @@ async def export_transactions_csv_get(
     
     filters = TransactionFilter(
         start_date=start_date,
-        end_date=end_date
+        end_date=end_date,
+        transaction_types=transaction_types
     )
     
     export_request = CSVExportRequest(
