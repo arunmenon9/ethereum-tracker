@@ -71,18 +71,37 @@ Create a `.env` file in the root directory:
 env
 
 ```
-# Database
-POSTGRES_PASSWORD=your_secure_password
+# Etherscan API Configuration
+ETHERSCAN_API_KEY=your_key
 
-# Etherscan API
-ETHERSCAN_API_KEY=your_etherscan_api_key
+# Database Configuration
+POSTGRES_PASSWORD=your_secure_postgres_password
+DATABASE_URL=postgresql+asyncpg://postgres:your_secure_postgres_password@localhost:5432/ethereum_tracker
 
-# Authentication
+# Redis Configuration  
+REDIS_URL=redis://localhost:6379/0
+
+# API Authentication
 API_KEY=your-secret-api-key
-SECRET_KEY=your-secret-key
+SECRET_KEY=your-secret-key-for-jwt
 
-# Optional: Redis URL (uses default if not specified)
-REDIS_URL=redis://redis:6379/0
+# Application Configuration
+LOG_LEVEL=INFO
+DEBUG=false
+ALLOWED_HOSTS=["*"]
+
+# Rate Limiting
+RATE_LIMIT_PER_MINUTE=100
+ETHERSCAN_RATE_LIMIT=5.0
+
+# CSV Export Limits
+MAX_EXPORT_RECORDS=50000
+EXPORT_BATCH_SIZE=1000
+
+# Cache TTL (seconds)
+CACHE_TTL_TRANSACTIONS=3600
+CACHE_TTL_BLOCKS=3600
+
 ```
 
 ### 3\. Get Your Etherscan API Key
@@ -110,65 +129,6 @@ docker-compose up -d --build
 -   **Health Check**: <http://localhost:8000/health>
 -   **Alternative Docs**: <http://localhost:8000/redoc>
 
-📖 Usage Examples
------------------
-
-### Authentication
-
-All API requests require a Bearer token:
-
-bash
-
-```
-curl -H "Authorization: Bearer your-secret-api-key"\
-     http://localhost:8000/api/v1/transactions/0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d
-```
-
-### Get Wallet Transactions
-
-bash
-
-```
-# Basic request
-curl -H "Authorization: Bearer your-api-key"\
-     "http://localhost:8000/api/v1/transactions/0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d"
-
-# With filters
-curl -H "Authorization: Bearer your-api-key"\
-     "http://localhost:8000/api/v1/transactions/0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d?start_date=2024-01-01T00:00:00&transaction_types=ETH&transaction_types=ERC-20"
-```
-
-### Export to CSV
-
-bash
-
-```
-curl -X POST -H "Authorization: Bearer your-api-key"\
-     -H "Content-Type: application/json"\
-     -d '{"wallet_address": "0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d"}'\
-     http://localhost:8000/api/v1/exports/csv --output transactions.csv
-```
-
-### Generate Report for Large Datasets
-
-bash
-
-```
-# Start report generation
-curl -X POST -H "Authorization: Bearer your-api-key"\
-     -H "Content-Type: application/json"\
-     -d '{"wallet_address": "0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d"}'\
-     http://localhost:8000/api/v1/reports/generate
-
-# Check status
-curl -H "Authorization: Bearer your-api-key"\
-     http://localhost:8000/api/v1/reports/status/0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d
-
-# Download when complete
-curl -H "Authorization: Bearer your-api-key"\
-     http://localhost:8000/api/v1/reports/download/0x742d35Cc63aB4747B8bc21bB6c2d65bb0E4e8b5d\
-     --output large_dataset_report.csv
-```
 
 🏗 Architecture
 ---------------
@@ -192,37 +152,95 @@ curl -H "Authorization: Bearer your-api-key"\
 -   **Validation Errors**: Detailed field-level error messages
 -   **API Limits**: Graceful handling of Etherscan rate limits with retry logic
 
+🏗️ Architecture Decisions
+--------------------------
+
+### 1\. **Dual-Path Strategy for Dataset Sizes**
+
+-   **Small datasets (<10k transactions)**: Direct API response with pagination
+-   **Large datasets (>10k transactions)**: Background job processing with file generation
+-   **Rationale**: Etherscan API has pagination limits (10k records max). Background jobs prevent timeouts and provide better UX for large datasets.
+
+### 2\. **Block Range Segmentation**
+
+For large datasets, we segment requests by block ranges rather than pagination:
+
+python
+
+```
+# Instead of: page=1, page=2, page=3... (hits 10k limit)
+# We use: blocks 0-100k, 100k-200k, 200k-300k...
+```
+
+This bypasses pagination limits and enables complete transaction history retrieval.
+
+### 3\. **Multi-layer Caching Strategy**
+
+-   **L1 Cache**: Redis for API responses (1-hour TTL)
+-   **L2 Cache**: Database storage for processed transactions
+-   **L3 Cache**: Etherscan rate limiting to prevent API exhaustion
+
+### 4\. **Streaming CSV Generation**
+
+Uses FastAPI's `StreamingResponse` to handle large CSV files without memory exhaustion:
+
+python
+
+```
+async def generate_csv_data() -> AsyncIterator[str]:
+    # Process and yield data in chunks
+    yield csv_chunk
+```
+
+### 5\. **Comprehensive Transaction Type Support**
+
+Handles all Ethereum transaction types through parallel API calls:
+
+-   Normal transactions (ETH transfers)
+-   Internal transactions (smart contract calls)
+-   ERC-20 token transfers
+-   ERC-721/ERC-1155 NFT transfers
+
+⚠️ Assumptions and Limitations
+------------------------------
+
+### Authentication (POC Limitation)
+
+-   **Current Implementation**: Simple Bearer token authentication with a single API key
+-   **Production Recommendation**: Implement proper user management with JWT tokens, OAuth2, or similar
+-   **Rationale**: For POC purposes, basic auth meets requirements while keeping implementation simple
+
+### Analytics Design (Single-User Focus)
+
+-   **Current Scope**: Analytics are wallet-centric, not user-centric
+-   **Assumption**: Single user per deployment scenario
+-   **Future Enhancement**: Multi-user analytics would require:
+
+    sql
+
+    ```
+    -- Additional user management tables
+    users (id, email, created_at)
+    user_wallets (user_id, wallet_address, nickname)
+    user_api_usage (user_id, wallet_address, endpoint, timestamp)
+    ```
+
+-   **Rationale**: Time constraints led to focusing on core transaction functionality first
+
+### Data Consistency
+
+-   **Assumption**: Etherscan data is the source of truth
+-   **Limitation**: No cross-validation with other data sources
+-   **Handling**: Graceful degradation when Etherscan is unavailable
+
+### Rate Limiting
+
+-   **Etherscan Free Tier**: 5 requests/second, 100k requests/day
+-   **Current Strategy**: Conservative rate limiting with exponential backoff
+-   **Scaling**: Consider Etherscan Pro plan for production
+
 🔧 Configuration
 ----------------
-
-### Environment Variables
-
-env
-
-```
-# Database Configuration
-DATABASE_URL=postgresql+asyncpg://postgres:password@postgres:5432/ethereum_tracker
-
-# Redis Configuration
-REDIS_URL=redis://redis:6379/0
-
-# Etherscan API
-ETHERSCAN_API_KEY=your_api_key
-ETHERSCAN_RATE_LIMIT=5.0  # requests per second
-
-# Application Security
-API_KEY=your-secret-api-key
-SECRET_KEY=your-secret-key
-
-# Performance Tuning
-CACHE_TTL_TRANSACTIONS=3600  # 1 hour
-MAX_EXPORT_RECORDS=50000
-EXPORT_BATCH_SIZE=1000
-
-# Logging
-LOG_LEVEL=INFO
-DEBUG=false
-```
 
 ### Docker Compose Services
 
@@ -238,17 +256,8 @@ DEBUG=false
 bash
 
 ```
-# Install Python dependencies
-pip install -r requirements.txt
+docker-compose up --build
 
-# Set up environment variables
-cp .env.example .env
-
-# Start only database services
-docker-compose up postgres redis -d
-
-# Run API locally
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Database Operations
@@ -264,17 +273,6 @@ docker-compose logs api
 docker-compose logs postgres
 ```
 
-### Testing
-
-bash
-
-```
-# Run tests in container
-docker-compose exec api pytest -v
-
-# Run with coverage
-docker-compose exec api coverage run -m pytest -v && coverage report
-```
 
 📊 Monitoring & Analytics
 -------------------------
