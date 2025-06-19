@@ -1,0 +1,146 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database with initialization
+  postgres:
+    image: postgres:15-alpine
+    container_name: ethereum_postgres
+    environment:
+      POSTGRES_DB: ethereum_tracker
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Mount the init script - THIS IS THE KEY CHANGE
+      - ./database/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      - ethereum_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ethereum_tracker"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: |
+      bash -c "
+      /usr/local/bin/docker-entrypoint.sh postgres &
+      sleep 10
+      PGPASSWORD=$${POSTGRES_PASSWORD} psql -h localhost -U $${POSTGRES_USER} -d $${POSTGRES_DB} -c \"
+      CREATE TABLE IF NOT EXISTS blocks (
+          id SERIAL PRIMARY KEY,
+          block_number BIGINT NOT NULL UNIQUE,
+          block_hash VARCHAR(66) NOT NULL UNIQUE,
+          timestamp TIMESTAMP NOT NULL,
+          gas_limit BIGINT NOT NULL,
+          gas_used BIGINT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS transactions (
+          id SERIAL PRIMARY KEY,
+          tx_hash VARCHAR(66) NOT NULL UNIQUE,
+          block_number BIGINT NOT NULL,
+          from_address VARCHAR(42) NOT NULL,
+          to_address VARCHAR(42),
+          value NUMERIC(78) NOT NULL,
+          gas_limit BIGINT NOT NULL,
+          gas_price BIGINT NOT NULL,
+          gas_used BIGINT,
+          transaction_type VARCHAR(20) NOT NULL DEFAULT 'ETH',
+          token_address VARCHAR(42),
+          token_symbol VARCHAR(20),
+          token_name VARCHAR(100),
+          token_id VARCHAR(78),
+          timestamp TIMESTAMP NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS api_usage (
+          id SERIAL PRIMARY KEY,
+          wallet_address VARCHAR(42) NOT NULL,
+          endpoint VARCHAR(100) NOT NULL,
+          request_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          response_time_ms INTEGER,
+          status_code INTEGER,
+          ip_address VARCHAR(45)
+      );
+      CREATE TABLE IF NOT EXISTS report_jobs (
+          id SERIAL PRIMARY KEY,
+          report_id VARCHAR(36) NOT NULL UNIQUE,
+          wallet_address VARCHAR(42) NOT NULL,
+          status VARCHAR(20) NOT NULL DEFAULT 'pending',
+          filters TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          started_at TIMESTAMP,
+          completed_at TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          progress_percentage INTEGER DEFAULT 0,
+          error_message TEXT,
+          file_path VARCHAR(500),
+          file_size_mb NUMERIC(10, 2),
+          total_transactions INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_blocks_block_number ON blocks(block_number);
+      CREATE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(tx_hash);
+      CREATE INDEX IF NOT EXISTS idx_transactions_from_address ON transactions(from_address);
+      CREATE INDEX IF NOT EXISTS idx_api_usage_wallet_address ON api_usage(wallet_address);
+      CREATE INDEX IF NOT EXISTS idx_report_jobs_wallet_address ON report_jobs(wallet_address);
+      \"
+      wait
+      "
+
+  # Redis Cache (unchanged)
+  redis:
+    image: redis:7-alpine
+    container_name: ethereum_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - ethereum_network
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # FastAPI Application (simplified startup)
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ethereum_api
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/ethereum_tracker
+      - REDIS_URL=redis://redis:6379/0
+      - ETHERSCAN_API_KEY=${ETHERSCAN_API_KEY}
+      - API_KEY=${API_KEY:-your-secret-api-key}
+      - SECRET_KEY=${SECRET_KEY:-your-secret-key}
+      - LOG_LEVEL=INFO
+      - DEBUG=false
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - ethereum_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  ethereum_network:
+    driver: bridge
