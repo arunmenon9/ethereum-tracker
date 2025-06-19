@@ -217,7 +217,7 @@ class EtherscanClient:
         await cache_manager.set(cache_key, all_transactions, settings.CACHE_TTL_TRANSACTIONS)
         return all_transactions
    
-    async def get_token_transfers(self, address: str, contract_address: Optional[str] = None) -> List[Dict]:
+    async def get_token_transfers(self, address: str, start_block: int = 0, end_block: int = 99999999, contract_address: Optional[str] = None) -> List[Dict]:
         """Get ERC-20 token transfers"""
         cache_key = cache_manager.get_cache_key("token_tx", address, contract_address or "all")
         cached_result = await cache_manager.get(cache_key)
@@ -230,6 +230,8 @@ class EtherscanClient:
             'module': 'account',
             'action': 'tokentx',
             'address': address,
+            'startblock': start_block,
+            'endblock': end_block,
             'sort': 'asc'
         }
         
@@ -270,7 +272,7 @@ class EtherscanClient:
         await cache_manager.set(cache_key, all_transactions, settings.CACHE_TTL_TRANSACTIONS)
         return all_transactions   
 
-    async def get_nft_transfers(self, address: str, contract_address: Optional[str] = None) -> List[Dict]:
+    async def get_nft_transfers(self, address: str, start_block: int = 0, end_block: int = 99999999, contract_address: Optional[str] = None) -> List[Dict]:
         """Get ERC-721 NFT transfers"""
         cache_key = cache_manager.get_cache_key("nft_tx", address, contract_address or "all")
         cached_result = await cache_manager.get(cache_key)
@@ -283,6 +285,8 @@ class EtherscanClient:
             'module': 'account',
             'action': 'tokennfttx',
             'address': address,
+            'startblock': start_block,
+            'endblock': end_block,
             'sort': 'asc'
         }
         
@@ -355,6 +359,7 @@ class EtherscanClient:
             normal_tx_task, internal_tx_task, token_tx_task, nft_tx_task,
              return_exceptions=True
         )
+
 
         return {
             'normal': normal_tx if not isinstance(normal_tx, Exception) else [],

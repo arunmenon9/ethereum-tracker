@@ -1,18 +1,22 @@
 # src/api/reports.py
-from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
-from typing import Optional
+from datetime import datetime
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from src.services.report import ReportService
 from src.api.auth import verify_api_key
-from src.models.schemas import ReportRequest, ReportStatusResponse, ReportGenerationResponse
+from src.models.schemas import ReportRequest, ReportStatusResponse, ReportGenerationResponse, TransactionFilter, TransactionType
 from src.utils.validators import AddressValidator
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
-@router.post("/generate", response_model=ReportGenerationResponse)
+@router.get("/generate/{wallet_address}", response_model=ReportGenerationResponse)
 async def generate_report(
-    report_request: ReportRequest,
+    wallet_address: str,
+    start_date: datetime = None,
+    end_date: datetime = None,
+    transaction_types: Optional[List[TransactionType]] = Query(None, description="Filter by transaction types (can specify multiple)"),
     api_key: str = Depends(verify_api_key)
 ):
     """
@@ -31,9 +35,15 @@ async def generate_report(
     service = ReportService()
     
     try:
+        filters = TransactionFilter(
+                start_date=start_date,
+                end_date=end_date,
+                transaction_types=transaction_types
+                )
+        
         result = await service.generate_report(
-            wallet_address=report_request.wallet_address,
-            filters=report_request.filters
+            wallet_address=wallet_address,
+            filters=filters
         )
         return ReportGenerationResponse(**result)
     except Exception as e:

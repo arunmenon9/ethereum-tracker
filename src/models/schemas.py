@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 from decimal import Decimal
@@ -32,12 +32,11 @@ class TransactionFilter(BaseModel):
     min_value: Optional[Decimal] = Field(None, ge=0, description="Minimum value filter")
     max_value: Optional[Decimal] = Field(None, ge=0, description="Maximum value filter")
     
-    @field_validator('end_date')
-    @classmethod
-    def validate_date_range(cls, v, info):
-        if v and info.data.get('start_date') and v < info.data['start_date']:
-            raise ValueError('end_date must be after start_date')
-        return v
+    @model_validator(mode="after")
+    def check_date_range(self):
+        if self.start_date and self.end_date and self.end_date < self.start_date:
+            raise ValueError("end_date must be after start_date")
+        return self
 
 class TransactionListResponse(BaseModel):
     transactions: List[TransactionResponse]
@@ -114,7 +113,6 @@ class ReportStatusResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     progress_percentage: Optional[int] = None
-    estimated_completion: Optional[datetime] = None
     error_message: Optional[str] = None
     file_size_mb: Optional[float] = None
     total_transactions: Optional[int] = None

@@ -129,7 +129,7 @@ class ReportService:
             SELECT report_id, status FROM report_jobs 
             WHERE wallet_address = :wallet_address 
             AND created_at > :cutoff_time
-            AND status IN ('pending', 'in_progress', 'completed')
+            AND status IN ('pending', 'in_progress')
             ORDER BY created_at DESC 
             LIMIT 1
         """, {
@@ -224,8 +224,9 @@ class ReportService:
                 for tx_type, transactions in range_transactions.items():
                     for tx in transactions:
                         processed_tx = TransactionService.process_transaction_for_report(tx, tx_type)
-                        if TransactionService.transaction_matches_filters(processed_tx, filters):
-                            all_transactions.append(processed_tx)
+                        if processed_tx :
+                            if TransactionService.transaction_matches_filters(processed_tx, filters):
+                                all_transactions.append(processed_tx)
                 
                 # Update progress
                 processed_ranges += 1

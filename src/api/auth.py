@@ -2,6 +2,7 @@ from fastapi import HTTPException, Security, Depends, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import logging
 from datetime import datetime
+from fastapi.responses import JSONResponse
 
 from src.config import get_settings
 from src.database import database

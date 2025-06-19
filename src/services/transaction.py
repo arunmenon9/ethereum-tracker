@@ -21,6 +21,8 @@ class TransactionService:
         """Process transaction for report format (returns dict for CSV generation)"""
         try:
             # Common fields
+            if isinstance(tx, str):
+                return None
             base_data = {
                 'tx_hash': tx.get('hash', ''),
                 'block_number': int(tx.get('blockNumber', 0)),
@@ -150,7 +152,6 @@ class TransactionService:
                         return False
                 except (ValueError, TypeError):
                     pass
-            
             return True
             
         except (ValueError, TypeError, KeyError) as e:
@@ -281,8 +282,9 @@ class TransactionService:
                         for tx in transactions:
                             if tx:  # Ensure transaction data is valid
                                 processed_tx = self.process_transaction_for_report(tx, tx_type)
-                                if self.transaction_matches_filters(processed_tx, filters):
-                                    all_transactions.append(processed_tx)
+                                if processed_tx:
+                                    if self.transaction_matches_filters(processed_tx, filters):
+                                        all_transactions.append(processed_tx)
                     
                     processed_ranges += 1
                     progress = int((processed_ranges / total_ranges) * 100)
